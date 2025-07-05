@@ -10,9 +10,15 @@
   },
   "dependencies": {
     "expo": "~53.0.17",
+    "expo-av": "^15.1.7",
+    "expo-constants": "^17.1.7",
+    "expo-file-system": "^18.1.11",
     "expo-status-bar": "~2.2.3",
+    "form-data": "^4.0.3",
+    "openai": "^5.8.2",
     "react": "19.0.0",
-    "react-native": "0.79.5"
+    "react-native": "0.79.5",
+    "react-native-dotenv": "^3.4.11"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"
