@@ -18,7 +18,14 @@ export default function App() {
   });
 
   useEffect(() => {
-    Audio.requestPermissionsAsync();
+    const setupAudio = async () => {
+      await Audio.requestPermissionsAsync();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+    };
+    setupAudio();
   }, []);
 
 
