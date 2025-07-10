@@ -117,7 +117,8 @@ export default function App() {
 
   const shareToWhatsApp = (message) => {
     try {
-      const url = `whatsapp://send?phone=${WHATSAPP_NUMBER.replace('+', '')}&text=${encodeURIComponent(message)}`;
+      const url = `https://wa.me/${WHATSAPP_NUMBER.replace('+', '')}?text=${encodeURIComponent(message)}`;
+      console.log(`Sending to ${WHATSAPP_NUMBER.replace('+', '')}`)
       
       Linking.openURL(url).catch((err) => {
         Alert.alert('WhatsApp Error', 'Could not open WhatsApp. Make sure it is installed.');
