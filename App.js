@@ -9,7 +9,7 @@ import { OPENAI_API_KEY, WHATSAPP_NUMBER } from '@env';
 export default function App() {
   const [recording, setRecording] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [aiResult, setAiResult] = useState(null);
+  const [songResult, setSongResult] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   // Initialize OpenAI client
@@ -31,48 +31,35 @@ export default function App() {
 
   const startRecording = async () => {
     try {
-      console.log('🎤 Starting recording...');
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       setRecording(recording);
       setIsRecording(true);
-      console.log('✅ Recording started successfully');
     } catch (err) {
-      console.error('❌ Failed to start recording:', err);
       Alert.alert('Error', 'Failed to start recording');
     }
   };
 
   const stopRecording = async () => {
     try {
-      console.log('⏹️ Stopping recording...');
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
-      console.log('📁 Recording URI:', uri);
       
       setRecording(null);
       setIsRecording(false);
-      console.log('✅ Recording stopped successfully');
       
-      // Send to OpenAI for analysis
-      console.log('🤖 Starting AI analysis...');
-      await analyzeRecording(uri);
-      
+      await identifySong(uri);
     } catch (err) {
-      console.error('❌ Failed to stop recording:', err);
       Alert.alert('Error', 'Failed to stop recording');
     }
   };
 
-  const analyzeRecording = async (audioUri) => {
+  const identifySong = async (audioUri) => {
     try {
-      console.log('🔄 Setting analysis state...');
       setIsAnalyzing(true);
-      setAiResult(null);
+      setSongResult(null);
       
-      // Create form data for the API request
-      console.log('📦 Creating FormData...');
       const formData = new FormData();
       formData.append('file', {
         uri: audioUri,
@@ -80,114 +67,67 @@ export default function App() {
         name: 'recording.m4a',
       });
       formData.append('model', 'whisper-1');
-      console.log('✅ FormData created');
       
-      // Send to OpenAI Whisper for transcription using fetch
-      console.log('🌐 Sending transcription request to OpenAI...');
       const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        },
+        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
         body: formData,
       });
       
-      console.log('📨 Transcription response status:', transcriptionResponse.status);
       const transcriptionResult = await transcriptionResponse.json();
-      console.log('📝 Transcription result:', transcriptionResult);
       
       if (!transcriptionResponse.ok) {
-        console.error('❌ Transcription API error:', transcriptionResult);
         throw new Error(transcriptionResult.error?.message || 'Transcription failed');
       }
       
-      // Create the predefined prompt with the transcription
-      const prompt = `You will get some lyrics from a popular rock song, but there is a catch, the lyrics were translated from English to Romanian to make it trickier to guess. 
-
-Your task is to:
-1. Translate the lyrics back to English
-2. Guess the original song
-3. Respond ONLY with the band name and song name in this exact format: "Band Name - Song Name"
-
-Do NOT include the translation in your response. Do NOT explain your reasoning. Only respond with the band and song name.
-
-Here are the Romanian lyrics: "${transcriptionResult.text}"`;
+      const prompt = `You are a rock music expert. Translate this to English if needed, then identify the ROCK song:\n\n"${transcriptionResult.text}"\n\nFocus on rock genres: classic rock, hard rock, metal, punk, alternative rock, indie rock, progressive rock, etc.\n\nReturn: "Artist - Song" or "Not Found"`;
       
-      // Send to OpenAI GPT for analysis
-      console.log('🧠 Sending analysis request to GPT-4...');
-      console.log('📄 Prompt sent:', prompt);
-      
-      const analysis = await openai.chat.completions.create({
+      const result = await openai.chat.completions.create({
         model: 'gpt-4',
         messages: [
+          {
+            role: 'system',
+            content: 'You are a specialized rock music identification AI with comprehensive knowledge of rock songs from all eras and subgenres. You excel at identifying classic rock, hard rock, metal, punk, alternative rock, indie rock, progressive rock, and all rock subgenres from the 1960s to present day. You focus exclusively on rock music identification.'
+          },
           {
             role: 'user',
             content: prompt
           }
         ],
-        max_tokens: 300,
-        temperature: 0.7,
+        max_tokens: 100,
+        temperature: 0.1,
       });
       
-      console.log('🤖 GPT-4 response:', analysis.choices[0].message.content);
+      setSongResult(result.choices[0].message.content);
       
-      setAiResult({
-        transcription: transcriptionResult.text,
-        analysis: analysis.choices[0].message.content
-      });
       
-      console.log('🎉 Analysis completed successfully');
-      
-      // Clean up the temporary file
-      console.log('🗑️ Cleaning up temporary file...');
       await FileSystem.deleteAsync(audioUri, { idempotent: true });
-      console.log('✅ File cleanup completed');
       
     } catch (error) {
-      console.error('❌ Error analyzing recording:', error);
-      console.error('❌ Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      });
       Alert.alert('Error', `Failed to analyze recording: ${error.message}`);
-      
-      // Clean up the temporary file even if analysis fails
       try {
-        console.log('🗑️ Cleaning up file after error...');
         await FileSystem.deleteAsync(audioUri, { idempotent: true });
-        console.log('✅ Error cleanup completed');
       } catch (cleanupError) {
-        console.error('❌ Error cleaning up file:', cleanupError);
+        console.error('Error cleaning up file:', cleanupError);
       }
     } finally {
-      console.log('🔄 Setting analysis state to false');
       setIsAnalyzing(false);
     }
   };
 
-  const shareToWhatsApp = (result) => {
+  const shareToWhatsApp = (message) => {
     try {
-      console.log('📱 Opening WhatsApp...');
-      
-      const message = `${result.analysis}`;
-
       const url = `whatsapp://send?phone=${WHATSAPP_NUMBER.replace('+', '')}&text=${encodeURIComponent(message)}`;
       
       Linking.openURL(url).catch((err) => {
-        console.error('❌ Error opening WhatsApp:', err);
         Alert.alert('WhatsApp Error', 'Could not open WhatsApp. Make sure it is installed.');
       });
-
-      console.log('✅ WhatsApp opened successfully');
     } catch (error) {
-      console.error('❌ Error sharing to WhatsApp:', error);
       Alert.alert('WhatsApp Error', `Failed to share to WhatsApp: ${error.message}`);
     }
   };
 
   const toggleRecording = () => {
-    console.log('🎛️ Toggle recording button pressed. Current state:', isRecording);
     if (isRecording) {
       stopRecording();
     } else {
@@ -227,46 +167,40 @@ Here are the Romanian lyrics: "${transcriptionResult.text}"`;
       {isAnalyzing && (
         <View style={styles.loadingSection}>
           <ActivityIndicator size="large" color="#ff4444" />
-          <Text style={styles.loadingText}>🤖 Analyzing your recording...</Text>
+          <Text style={styles.loadingText}>🎸 Identifying rock song...</Text>
         </View>
       )}
       
-      {aiResult && (
+      {songResult && (
         <View style={styles.resultSection}>
-          <Text style={styles.resultTitle}>🎵 AI ANALYSIS</Text>
-          <ScrollView style={styles.resultScroll} showsVerticalScrollIndicator={false}>
-            <View style={styles.transcriptionSection}>
-              <Text style={styles.sectionTitle}>📝 Transcription:</Text>
-              <Text style={styles.transcriptionText}>{aiResult.transcription}</Text>
-            </View>
-            
-            <View style={styles.analysisSection}>
-              <Text style={styles.sectionTitle}>🔍 Analysis:</Text>
-              <Text style={styles.analysisText}>{aiResult.analysis}</Text>
-            </View>
-            
-            <View style={styles.buttonRow}>
-              <TouchableOpacity 
-                style={styles.whatsappButton}
-                onPress={() => shareToWhatsApp(aiResult)}
-              >
-                <Text style={styles.whatsappButtonText}>📱 SEND TO WHATSAPP</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.clearButton}
-                onPress={() => setAiResult(null)}
-              >
-                <Text style={styles.clearButtonText}>🗑️ CLEAR RESULT</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
+          <Text style={styles.resultTitle}>🎸 ROCK SONG IDENTIFICATION</Text>
+          <Text style={styles.subtitleText}>Rock music specialist - Tap result to share</Text>
+          
+          <View style={styles.resultsContainer}>
+            {/* AI Analysis Result */}
+            <TouchableOpacity 
+              style={styles.resultCard}
+              onPress={() => shareToWhatsApp(songResult)}
+            >
+              <View style={styles.resultHeader}>
+                <Text style={styles.resultLabel}>🎸 Rock Music AI</Text>
+              </View>
+              <Text style={styles.resultText}>{songResult}</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.clearButton}
+            onPress={() => setSongResult(null)}
+          >
+            <Text style={styles.clearButtonText}>🗑️ CLEAR RESULTS</Text>
+          </TouchableOpacity>
         </View>
       )}
       
-      {!isAnalyzing && !aiResult && (
+      {!isAnalyzing && !songResult && (
         <View style={styles.emptySection}>
-          <Text style={styles.emptyText}>Record something to get AI analysis! 🤘</Text>
+          <Text style={styles.emptyText}>Record a rock song to identify it! 🎸🤘</Text>
         </View>
       )}
       
@@ -404,81 +338,63 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
     textAlign: 'center',
-    marginBottom: 15,
+    marginBottom: 8,
     letterSpacing: 2,
     textShadowColor: '#000000',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
   },
-  resultScroll: {
-    flex: 1,
-  },
-  transcriptionSection: {
-    marginBottom: 20,
-  },
-  analysisSection: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '800',
-    marginBottom: 10,
-  },
-  transcriptionText: {
-    color: '#e0e0e0',
+  subtitleText: {
+    color: '#999999',
     fontSize: 14,
-    lineHeight: 20,
-    backgroundColor: '#2a2a2a',
-    padding: 12,
-    borderRadius: 8,
+    textAlign: 'center',
+    marginBottom: 20,
     fontStyle: 'italic',
-    borderWidth: 1,
-    borderColor: '#404040',
   },
-  analysisText: {
+  resultsContainer: {
+    gap: 15,
+    marginBottom: 20,
+  },
+  resultCard: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#404040',
+    padding: 15,
+    elevation: 3,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  resultHeader: {
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#404040',
+  },
+  resultLabel: {
+    color: '#dc2626',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  resultText: {
     color: '#ffffff',
     fontSize: 16,
-    lineHeight: 22,
-    backgroundColor: '#2a2a2a',
-    padding: 15,
-    borderRadius: 8,
     fontWeight: '700',
     textAlign: 'center',
-    borderWidth: 2,
-    borderColor: '#dc2626',
-    textShadowColor: '#000000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 15,
-    gap: 10,
-  },
-  whatsappButton: {
-    backgroundColor: '#25D366',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderRadius: 8,
-    flex: 1,
-  },
-  whatsappButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
-    textAlign: 'center',
+    lineHeight: 22,
   },
   clearButton: {
     backgroundColor: '#dc2626',
-    paddingHorizontal: 15,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
-    flex: 1,
     borderWidth: 2,
     borderColor: '#991b1b',
+    alignSelf: 'center',
+    marginTop: 10,
   },
   clearButtonText: {
     color: '#ffffff',
