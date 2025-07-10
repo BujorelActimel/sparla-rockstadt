@@ -80,14 +80,14 @@ export default function App() {
         throw new Error(transcriptionResult.error?.message || 'Transcription failed');
       }
       
-      const prompt = `You are a rock music expert. Translate this to English if needed, then identify the ROCK song:\n\n"${transcriptionResult.text}"\n\nFocus on rock genres: classic rock, hard rock, metal, punk, alternative rock, indie rock, progressive rock, etc.\n\nReturn: "Artist - Song" or "Not Found"`;
+      const prompt = `You are a rock song expert. This transcript is in Romanian. First translate it to English to better recognize the lyrics, then try to guess the rock song based on the lyrics (which may not be exact):\n\n"${transcriptionResult.text}"\n\nRespond ONLY with the format "band name - song name" or "not found". Nothing else.`;
       
       const result = await openai.chat.completions.create({
         model: 'gpt-4',
         messages: [
           {
             role: 'system',
-            content: 'You are a specialized rock music identification AI with comprehensive knowledge of rock songs from all eras and subgenres. You excel at identifying classic rock, hard rock, metal, punk, alternative rock, indie rock, progressive rock, and all rock subgenres from the 1960s to present day. You focus exclusively on rock music identification.'
+            content: 'You are a rock song expert with extensive knowledge of rock music from all eras. You can translate Romanian to English and identify rock songs based on potentially inexact lyrics. You respond ONLY in the format "band name - song name" or "not found".'
           },
           {
             role: 'user',
